@@ -1,37 +1,22 @@
-import { checkAlias, checkInput, sendBossInfoEmbed } from '../util/common';
+import { retrieveMvpFromBossNameOrAlias } from '../util/common';
+import { createBossInfoEmbed } from '../util/embed';
 
 export const name = 'info';
-export const description = 'To check boss information';
+export const description = 'To view the information of a specific boss';
 
 export const execute = (message, args, bossList) => {
-  let input = args.join(' ');
-  let isFound = false;
-  let isValidInput = false;
-  let isValidAlias = true;
-
-  isValidAlias = checkAlias(input);
-  isValidInput = checkInput(input, isValidAlias);
+  const cleanInput = args.join(' ').toLowerCase().trim();
+  const isValidInput = cleanInput.length >= 2;
+  let retrievedMvp = null;
 
   if (isValidInput) {
-    for (let i = 0; i < bossList.bosses.length; i++) {
-      if (
-        bossList.bosses[i].bossName.toLowerCase().includes(input.toLowerCase().trim()) &&
-        !isValidAlias
-      ) {
-        isFound = sendBossInfoEmbed(message, bossList.bosses[i], isFound);
-      } else if (isValidAlias) {
-        for (let j = 0; j < bossList.bosses[i].alias.length; j++) {
-          if (bossList.bosses[i].alias[j].toLowerCase() === input.toLowerCase().trim()) {
-            isFound = sendBossInfoEmbed(message, bossList.bosses[i], isFound);
-          }
-        }
-      }
-    }
+    retrievedMvp = retrieveMvpFromBossNameOrAlias(bossList, cleanInput);
+    message.channel.send(createBossInfoEmbed(retrievedMvp));
   } else {
-    message.channel.send('Please enter at least **3 characters** or the correct **boss alias**');
+    message.channel.send(messages.INVALID_MVP_INPUT);
   }
 
-  if (!isFound && isValidInput) {
-    message.channel.send('Boss not found! Please try again.');
+  if (!retrievedMvp && isValidInput) {
+    message.channel.send(messages.BOSS_NOT_FOUND);
   }
 };

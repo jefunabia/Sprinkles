@@ -1,159 +1,107 @@
 import {
   addTimeInSecondsToCalendarFormat,
   addTimeInSecondsToUnixFormat,
-  checkAlias,
-  checkInput,
-  getCurrentTime,
+  convertSecondsToHMS,
   convertToTimestamp,
   convertUnixTimeToHMAFormat,
-  sendBossAddedEmbed,
+  getCurrentTime,
+  retrieveMvpFromBossNameOrAlias,
   sortArray,
 } from '../util/common';
+import { messages } from '../globals/messages';
+import { mvpSubCommands } from '../globals/constants';
+import { createBossAddedEmbed } from '../util/embed';
+
 export const name = 'mvp';
 export const description = 'Ragnarok Online MVP helper';
 
 export const execute = (message, args, bossList) => {
-  let input = '';
-  let isFound = false;
-  let isValidInput = false;
-  let isValidAlias = true;
-  let currentMVPList = [];
-  let currentTimeInUnix = convertToTimestamp(getCurrentTime());
-  let minRespawnTime;
-  let maxRespawnTime;
-
-  if (args[0] === 'add') {
-    for (let i = 1; i < args.length; i++) {
-      input += args[i] + ' ';
+  switch (args[0]) {
+    case mvpSubCommands.ADD: {
+      executeSubCommandAdd(message, args, bossList);
+      break;
     }
-
-    isValidAlias = checkAlias(input);
-    isValidInput = checkInput(input, isValidAlias);
-
-    if (isValidInput) {
-      for (let i = 0; i < bossList.bosses.length; i++) {
-        if (
-          bossList.bosses[i].bossName.toLowerCase().includes(input.toLowerCase().trim()) &&
-          !isValidAlias
-        ) {
-          isFound = setupBossAddedEmbed(
-            bossList.bosses[i],
-            bossList.bosses[i].minRespawnTimeScheduleInSeconds,
-            bossList.bosses[i].maxRespawnTimeScheduleInSeconds,
-            isFound,
-            message,
-          );
-
-          //  change deathTime, minRespawn and maxRespawn in bossList file
-
-          minRespawnTime = addTimeInSecondsToUnixFormat(
-            bossList.bosses[i].minRespawnTimeScheduleInSeconds,
-          );
-          maxRespawnTime = addTimeInSecondsToUnixFormat(
-            bossList.bosses[i].maxRespawnTimeScheduleInSeconds,
-          );
-
-          bossList.bosses[i].deathTime = currentTimeInUnix;
-          bossList.bosses[i].minRespawnTime = minRespawnTime;
-          bossList.bosses[i].maxRespawnTime = maxRespawnTime;
-          break;
-        } else if (isValidAlias) {
-          for (let j = 0; j < bossList.bosses[i].alias.length; j++) {
-            if (bossList.bosses[i].alias[j].toLowerCase() === input.toLowerCase().trim()) {
-              isFound = setupBossAddedEmbed(
-                bossList.bosses[i],
-                bossList.bosses[i].minRespawnTimeScheduleInSeconds,
-                bossList.bosses[i].maxRespawnTimeScheduleInSeconds,
-                isFound,
-                message,
-              );
-              //  change deathTime, minRespawn and maxRespawn in bossList file
-
-              minRespawnTime = addTimeInSecondsToUnixFormat(
-                bossList.bosses[i].minRespawnTimeScheduleInSeconds,
-              );
-              maxRespawnTime = addTimeInSecondsToUnixFormat(
-                bossList.bosses[i].maxRespawnTimeScheduleInSeconds,
-              );
-
-              bossList.bosses[i].deathTime = currentTimeInUnix;
-              bossList.bosses[i].minRespawnTime = minRespawnTime;
-              bossList.bosses[i].maxRespawnTime = maxRespawnTime;
-            }
-          }
-        }
-      }
-    } else {
-      message.channel.send('Please enter at least **3 characters** or the correct **boss alias**');
+    case mvpSubCommands.LIST: {
+      executeSubCommandList(message, args, bossList);
+      break;
     }
-    if (!isFound && isValidInput) {
-      message.channel.send(
-        'Boss not found! Please try again with the correct **boss name** or **alias**.',
-      );
+    case mvpSubCommands.CLEAR: {
+      executeSubCommandClear(message, args, bossList);
+      break;
     }
-  } else if (args[0] === 'list') {
-    let txt = '';
-    let minTime;
-    let maxTime;
-
-    for (let i = 0; i < bossList.bosses.length; i++) {
-      if (bossList.bosses[i].deathTime && bossList.bosses[i].minRespawnTime > currentTimeInUnix) {
-        currentMVPList.push(bossList.bosses[i]);
-      }
+    default: {
+      message.channel.send(messages.COMMAND_DOES_NOT_EXIST);
     }
-    currentMVPList = sortArray(currentMVPList);
-
-    if (currentMVPList.length > 0) {
-      for (let i = 0; i < currentMVPList.length; i++) {
-        minTime = convertUnixTimeToHMAFormat(currentMVPList[i].minRespawnTime);
-        maxTime = convertUnixTimeToHMAFormat(currentMVPList[i].maxRespawnTime);
-        txt += `🔹 **${currentMVPList[i].bossName}** | ${minTime} - ${maxTime}\n`;
-      }
-      message.channel.send(txt);
-    } else {
-      message.channel.send(
-        '⚠️ There is **no** MVP list! Enter `$mvp add <bossname>` to add a MVP into the list',
-      );
-    }
-  } else if (args[0] === 'clear') {
-    for (let i = 0; i < bossList.bosses.length; i++) {
-      if (bossList.bosses[i].deathTime) {
-        bossList.bosses[i].minRespawnTime = null;
-        bossList.bosses[i].maxRespawnTime = null;
-        bossList.bosses[i].deathTime = null;
-      }
-    }
-    currentMVPList = null;
-    message.channel.send('✅ MVP List has been cleared **successfully**!');
-  } else {
-    message.channel.send(
-      '⚠️ Command **does not exist**! Please enter `$help` for the list of bot commands.',
-    );
   }
 };
 
-// * parameter = boss data
-// * returns isFound result
-const setupBossAddedEmbed = (
-  bossList,
-  minRespawnTimeScheduleInSeconds,
-  maxRespawnTimeScheduleInSeconds,
-  isFound,
-  message,
-) => {
-  let minRespawnTimeInCalendar;
-  let maxRespawnTimeInCalendar;
+const executeSubCommandAdd = (message, args, bossList) => {
+  let roughInput = '';
+  for (let i = 1; i < args.length; i++) {
+    roughInput += `${args[i]} `;
+  }
 
-  minRespawnTimeInCalendar = addTimeInSecondsToCalendarFormat(minRespawnTimeScheduleInSeconds);
-  maxRespawnTimeInCalendar = addTimeInSecondsToCalendarFormat(maxRespawnTimeScheduleInSeconds);
+  const currentTimeInUnix = convertToTimestamp(getCurrentTime());
+  const cleanInput = roughInput.toLowerCase().trim();
+  const isValidInput = cleanInput.length >= 2;
 
-  isFound = sendBossAddedEmbed(
-    message,
-    bossList,
-    minRespawnTimeInCalendar,
-    maxRespawnTimeInCalendar,
-    isFound,
-  );
+  let retrievedMvp = null;
+  if (isValidInput) {
+    retrievedMvp = retrieveMvpFromBossNameOrAlias(bossList, cleanInput);
 
-  return isFound;
+    //  Update deathTime, minRespawn and maxRespawn in bossList file
+    retrievedMvp.deathTime = currentTimeInUnix;
+    retrievedMvp.minRespawnTime = addTimeInSecondsToUnixFormat(
+      retrievedMvp.minRespawnTimeScheduleInSeconds,
+    );
+    retrievedMvp.maxRespawnTime = addTimeInSecondsToUnixFormat(
+      retrievedMvp.maxRespawnTimeScheduleInSeconds,
+    );
+
+    message.channel.send(
+      createBossAddedEmbed(
+        retrievedMvp,
+        addTimeInSecondsToCalendarFormat(retrievedMvp.minRespawnTimeScheduleInSeconds),
+        addTimeInSecondsToCalendarFormat(retrievedMvp.maxRespawnTimeScheduleInSeconds),
+      ),
+    );
+    message.channel.send(
+      `MVP added successfully!\nI will remind you in **${convertSecondsToHMS(
+        retrievedMvp.minRespawnTimeScheduleInSeconds,
+      )}**!`,
+    );
+  } else {
+    message.channel.send(messages.INVALID_MVP_INPUT);
+  }
+  if (!retrievedMvp && isValidInput) {
+    message.channel.send(messages.BOSS_NOT_FOUND);
+  }
+};
+
+const executeSubCommandList = (message, args, bossList) => {
+  let messageText = '';
+  const currentMvps = sortArray(bossList.bosses.filter((mvp) => mvp.deathTime));
+
+  if (currentMvps.length > 0) {
+    currentMvps.forEach((mvp) => {
+      const minTime = convertUnixTimeToHMAFormat(mvp.minRespawnTime);
+      const maxTime = convertUnixTimeToHMAFormat(mvp.maxRespawnTime);
+      messageText += `🔹 **${mvp.bossName}** | ${minTime} - ${maxTime}\n`;
+    });
+    message.channel.send(messageText);
+  } else {
+    message.channel.send(messages.EMPTY_MVP_LIST);
+  }
+};
+
+const executeSubCommandClear = (message, args, bossList) => {
+  bossList.bosses.forEach((mvp) => {
+    if (mvp.deathTime) {
+      mvp.minRespawnTime = null;
+      mvp.maxRespawnTime = null;
+      mvp.deathTime = null;
+    }
+  });
+
+  message.channel.send(messages.MVP_LIST_CLEARED);
 };
