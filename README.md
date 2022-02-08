@@ -46,4 +46,4 @@ To view the list of the current MVPs with a respawn time schedule.
 To clear all contents in the MVP list.
 This command should **ONLY** be used when there is a server restart
 
-> Sprinkles is developed by 🌺 Xaikyu 🌺#3108 and Jeee#0016
+> Sprinkles is developed by 🌺 Xaikyu 🌺#2453 and Jeee#0016
